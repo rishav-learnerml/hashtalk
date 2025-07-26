@@ -1,46 +1,23 @@
 // src/ai/gemini.service.ts
 import { Injectable } from '@nestjs/common';
-import axios from 'axios';
-import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class GeminiService {
-  constructor(private config: ConfigService) {}
+  private icebreakers: string[] = [
+    "Why did the developer go broke? Because he used up all his cache! 💸",
+    "I'm not lazy, I'm just in an infinite loop of procrastination 🔁",
+    "Have you tried turning it off and on again? 🔧",
+    "Why do Java developers wear glasses? Because they don't C#! 🤓",
+    "My code works... I have no idea why. 🤷‍♂️",
+    "404: Icebreaker not found 🧊",
+    "To ‘git’ or not to ‘git’, that is the commit. 🧠",
+    "Debugging is like being the detective in a crime movie where you're also the murderer 🔍",
+    "npm install – because copy-paste is a skill 🧩",
+    "Real devs count from 0, not 1 😎",
+  ];
 
   async getIcebreaker(): Promise<{ message: string }> {
-    const apiKey = this.config.get('GEMINI_API_KEY');
-    const model = 'gemini-2.0-flash';
-    const prompt =
-      'Give a fun coding-related icebreaker for devs. One line only';
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-    try {
-      const res = await axios.post(
-        url,
-        {
-          contents: [
-            {
-              parts: [{ text: prompt }],
-            },
-          ],
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-goog-api-key': apiKey,
-          },
-        },
-      );
-
-      return {
-        message:
-          res.data.candidates?.[0]?.content?.parts?.[0]?.text ||
-          '🤖 Icebreaker not found',
-      };
-    } catch (error) {
-      console.error('[Gemini Error]', error.response?.data || error.message);
-      return { message: '❌ Failed to fetch Gemini response' };
-    }
+    const randomIndex = Math.floor(Math.random() * this.icebreakers.length);
+    return { message: this.icebreakers[randomIndex] };
   }
 }
