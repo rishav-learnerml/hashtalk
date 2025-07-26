@@ -7,7 +7,7 @@ export class GeminiController {
   constructor(private readonly geminiService: GeminiService) {}
 
   @Get('icebreaker')
-  async getIcebreaker(): Promise<string> {
+  async getIcebreaker(): Promise<{ message: string }> {
     return this.geminiService.getIcebreaker();
   }
 }

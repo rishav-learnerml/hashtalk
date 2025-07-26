@@ -7,10 +7,11 @@ import { ConfigService } from '@nestjs/config';
 export class GeminiService {
   constructor(private config: ConfigService) {}
 
-  async getIcebreaker(): Promise<string> {
+  async getIcebreaker(): Promise<{ message: string }> {
     const apiKey = this.config.get('GEMINI_API_KEY');
     const model = 'gemini-2.0-flash';
-    const prompt = 'Give a fun coding-related icebreaker for devs.';
+    const prompt =
+      'Give a fun coding-related icebreaker for devs. One line only';
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
@@ -32,13 +33,14 @@ export class GeminiService {
         },
       );
 
-      return (
-        res.data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        '🤖 Icebreaker not found'
-      );
+      return {
+        message:
+          res.data.candidates?.[0]?.content?.parts?.[0]?.text ||
+          '🤖 Icebreaker not found',
+      };
     } catch (error) {
       console.error('[Gemini Error]', error.response?.data || error.message);
-      return '❌ Failed to fetch Gemini response';
+      return { message: '❌ Failed to fetch Gemini response' };
     }
   }
 }
