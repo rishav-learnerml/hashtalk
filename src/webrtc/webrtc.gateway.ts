@@ -55,6 +55,8 @@ export class WebrtcGateway
     @MessageBody() data: JoinRoomPayload,
     @ConnectedSocket() client: Socket,
   ) {
+
+    console.log('🚀 join-room payload:', data, 'Socket ID:', client.id);
     const { roomId } = data;
     client.join(roomId);
 
