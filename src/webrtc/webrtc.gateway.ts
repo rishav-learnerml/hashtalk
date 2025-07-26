@@ -1,97 +1,73 @@
+// src/gateway/app.gateway.ts
 import {
-  MessageBody,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
-  ConnectedSocket,
-  OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
-interface JoinRoomPayload {
-  roomId: string;
-  userId: string;
-}
-
 @WebSocketGateway({
   cors: {
     origin: '*',
+    methods: ['GET', 'POST'],
   },
 })
-export class WebrtcGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
-{
-  @WebSocketServer()
-  server: Server;
+export class WebrtcGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  @WebSocketServer() server: Server;
 
-  private rooms: Record<string, string[]> = {}; // roomId -> socketIds
+  private users: Map<string, Socket> = new Map();
+  private waitingUser: string | null = null;
 
-  afterInit(server: Server) {
-    console.log('WebSocket server initialized');
+  handleConnection(socket: Socket) {
+    console.log(`✅ Client connected: ${socket.id}`);
   }
 
-  handleConnection(client: Socket) {
-    console.log(`Client connected: ${client.id}`);
-  }
+  handleDisconnect(socket: Socket) {
+    console.log(`❌ Client disconnected: ${socket.id}`);
+    this.users.delete(socket.id);
 
-  handleDisconnect(client: Socket) {
-    console.log(`Client disconnected: ${client.id}`);
-
-    for (const roomId in this.rooms) {
-      this.rooms[roomId] = this.rooms[roomId].filter(id => id !== client.id);
-      this.server.to(roomId).emit('user-disconnected', client.id);
-
-      // If room is empty, delete it
-      if (this.rooms[roomId].length === 0) {
-        delete this.rooms[roomId];
-      }
+    if (this.waitingUser === socket.id) {
+      this.waitingUser = null;
     }
+
+    socket.broadcast.emit('user-disconnected', socket.id);
   }
 
   @SubscribeMessage('join-room')
-  handleJoinRoom(
-    @MessageBody() data: JoinRoomPayload,
-    @ConnectedSocket() client: Socket,
-  ) {
+  handleJoin(socket: Socket, payload: { roomId: string }) {
+    console.log('🚀 join-room payload:', payload, 'Socket ID:', socket.id);
+    const { roomId } = payload;
+    socket.join(roomId);
 
-    console.log('🚀 join-room payload:', data, 'Socket ID:', client.id);
-    const { roomId } = data;
-    client.join(roomId);
+    if (this.waitingUser && this.waitingUser !== socket.id) {
+      const otherUser = this.waitingUser;
+      this.waitingUser = null;
 
-    if (!this.rooms[roomId]) {
-      this.rooms[roomId] = [];
+      this.server.to(otherUser).emit('match-found', { socketId: socket.id });
+      this.server.to(socket.id).emit('match-found', { socketId: otherUser });
+
+      console.log(`🎯 Matched: ${otherUser} <--> ${socket.id}`);
+    } else {
+      this.waitingUser = socket.id;
+      console.log('🕒 Waiting for another user to join...');
     }
-
-    this.rooms[roomId].push(client.id);
-
-    const otherUsers = this.rooms[roomId].filter(id => id !== client.id);
-    client.emit('all-users', otherUsers); // emit existing users to the new user
-
-    // Notify other users in the room
-    client.to(roomId).emit('user-joined', client.id);
   }
 
   @SubscribeMessage('sending-signal')
-  handleSendingSignal(
-    @MessageBody()
-    payload: { userToSignal: string; signal: any; callerId: string },
-  ) {
-    this.server.to(payload.userToSignal).emit('user-signal', {
+  handleSendingSignal(socket: Socket, payload: any) {
+    this.server.to(payload.userToSignal).emit('user-joined', {
       signal: payload.signal,
-      callerId: payload.callerId,
+      callerId: socket.id,
     });
   }
 
   @SubscribeMessage('returning-signal')
-  handleReturningSignal(
-    @MessageBody()
-    payload: { signal: any; callerId: string; id: string },
-  ) {
+  handleReturningSignal(socket: Socket, payload: any) {
     this.server.to(payload.callerId).emit('receiving-returned-signal', {
       signal: payload.signal,
-      id: payload.id,
+      id: socket.id,
     });
   }
 }
