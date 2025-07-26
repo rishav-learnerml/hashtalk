@@ -1,11 +1,10 @@
-// webrtc.gateway.ts
 import {
   MessageBody,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
-  OnGatewayInit,
   ConnectedSocket,
+  OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
@@ -40,10 +39,14 @@ export class WebrtcGateway
   handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
 
-    // Clean up user from all rooms
     for (const roomId in this.rooms) {
-      this.rooms[roomId] = this.rooms[roomId].filter((id) => id !== client.id);
+      this.rooms[roomId] = this.rooms[roomId].filter(id => id !== client.id);
       this.server.to(roomId).emit('user-disconnected', client.id);
+
+      // If room is empty, delete it
+      if (this.rooms[roomId].length === 0) {
+        delete this.rooms[roomId];
+      }
     }
   }
 
@@ -53,21 +56,18 @@ export class WebrtcGateway
     @ConnectedSocket() client: Socket,
   ) {
     const { roomId } = data;
-
     client.join(roomId);
 
     if (!this.rooms[roomId]) {
       this.rooms[roomId] = [];
     }
 
-    // Add new user to room
     this.rooms[roomId].push(client.id);
 
-    // Send existing users to the newly joined client
-    const otherUsers = this.rooms[roomId].filter((id) => id !== client.id);
-    client.emit('all-users', otherUsers);
+    const otherUsers = this.rooms[roomId].filter(id => id !== client.id);
+    client.emit('all-users', otherUsers); // emit existing users to the new user
 
-    // Notify others that a new user has joined
+    // Notify other users in the room
     client.to(roomId).emit('user-joined', client.id);
   }
 
@@ -84,7 +84,8 @@ export class WebrtcGateway
 
   @SubscribeMessage('returning-signal')
   handleReturningSignal(
-    @MessageBody() payload: { signal: any; callerId: string; id: string },
+    @MessageBody()
+    payload: { signal: any; callerId: string; id: string },
   ) {
     this.server.to(payload.callerId).emit('receiving-returned-signal', {
       signal: payload.signal,
