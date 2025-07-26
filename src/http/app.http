@@ -1,0 +1,43 @@
+// httpyac/auth.http
+### Signup
+POST http://localhost:3000/auth/signup
+Content-Type: application/json
+
+{
+  "email": "dev@example.com",
+  "password": "dev1234"
+}
+
+### Signin
+POST http://localhost:3000/auth/signin
+Content-Type: application/json
+
+{
+  "email": "dev@example.com",
+  "password": "dev1234"
+}
+
+// httpyac/ai.http
+### Get AI Icebreaker
+GET http://localhost:3000/ai/icebreaker
+
+// httpyac/socket-client.md
+// This is a sample Socket.IO client script you can run in browser console or use for testing matchmaking
+
+# const socket = io("http://localhost:3000");
+
+# socket.on("connect", () => {
+#   console.log("Connected as", socket.id);
+# });
+
+# socket.on("match", (data) => {
+#   console.log("Matched with:", data);
+# });
+
+# socket.on("signal", (data) => {
+#   console.log("Signal received:", data);
+# });
+
+# socket.emit("signal", { peerId: "target-id", signal: "sdp or candidate" });
+
+
