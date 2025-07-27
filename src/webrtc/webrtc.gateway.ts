@@ -1,73 +1,65 @@
-// src/gateway/app.gateway.ts
 import {
   SubscribeMessage,
   WebSocketGateway,
-  WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
-@WebSocketGateway({
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
-})
+@WebSocketGateway({ cors: true })
 export class WebrtcGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer() server: Server;
+  @WebSocketServer()
+  server: Server;
 
-  private users: Map<string, Socket> = new Map();
-  private waitingUser: string | null = null;
+  private room: string = 'default-room';
 
   handleConnection(socket: Socket) {
-    console.log(`✅ Client connected: ${socket.id}`);
+    socket.join(this.room);
+    const clients = Array.from(this.server.sockets.adapter.rooms.get(this.room) || []);
+    const otherClient = clients.find((id) => id !== socket.id);
+
+    if (otherClient) {
+      this.server.to(otherClient).emit('match-found', { socketId: socket.id });
+      socket.emit('match-found', { socketId: otherClient });
+    }
+
+    console.log(`[Socket Connected] ${socket.id}`);
   }
 
   handleDisconnect(socket: Socket) {
-    console.log(`❌ Client disconnected: ${socket.id}`);
-    this.users.delete(socket.id);
-
-    if (this.waitingUser === socket.id) {
-      this.waitingUser = null;
-    }
-
+    socket.leave(this.room);
     socket.broadcast.emit('user-disconnected', socket.id);
-  }
-
-  @SubscribeMessage('join-room')
-  handleJoin(socket: Socket, payload: { roomId: string }) {
-    console.log('🚀 join-room payload:', payload, 'Socket ID:', socket.id);
-    const { roomId } = payload;
-    socket.join(roomId);
-
-    if (this.waitingUser && this.waitingUser !== socket.id) {
-      const otherUser = this.waitingUser;
-      this.waitingUser = null;
-
-      this.server.to(otherUser).emit('match-found', { socketId: socket.id });
-      this.server.to(socket.id).emit('match-found', { socketId: otherUser });
-
-      console.log(`🎯 Matched: ${otherUser} <--> ${socket.id}`);
-    } else {
-      this.waitingUser = socket.id;
-      console.log('🕒 Waiting for another user to join...');
-    }
+    console.log(`[Socket Disconnected] ${socket.id}`);
   }
 
   @SubscribeMessage('sending-signal')
-  handleSendingSignal(socket: Socket, payload: any) {
+  handleSendingSignal(
+    socket: Socket,
+    payload: { userToSignal: string; signal: any; callerId: string }
+  ) {
     this.server.to(payload.userToSignal).emit('user-joined', {
       signal: payload.signal,
-      callerId: socket.id,
+      callerId: payload.callerId,
     });
   }
 
   @SubscribeMessage('returning-signal')
-  handleReturningSignal(socket: Socket, payload: any) {
+  handleReturningSignal(
+    socket: Socket,
+    payload: { callerId: string; signal: any }
+  ) {
     this.server.to(payload.callerId).emit('receiving-returned-signal', {
       signal: payload.signal,
       id: socket.id,
     });
+  }
+
+  @SubscribeMessage('ice-candidate')
+  handleIceCandidate(
+    socket: Socket,
+    payload: { to: string; candidate: RTCIceCandidateInit }
+  ) {
+    this.server.to(payload.to).emit('ice-candidate', payload.candidate);
   }
 }
